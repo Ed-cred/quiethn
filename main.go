@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"sort"
 	"strings"
 	"text/template"
 	"time"
@@ -64,29 +65,35 @@ func getTopStories(numStories int) ([]item, error) {
 	if err != nil {
 		return nil, errors.New("failed to load top stories")
 	}
-	var stories []item
-	for _, id := range ids {
-		type result struct {
-			item item
-			err  error
-		}
-		resChan := make(chan result, len(ids))
-		go func(id int) {
+	type result struct {
+		idx  int
+		item item
+		err  error
+	}
+	resChan := make(chan result, len(ids))
+	for i := 0; i < numStories; i++ {
+		go func(idx, id int) {
 			hnItem, err := client.GetItem(id)
 			if err != nil {
-				resChan <- result{err: err}
+				resChan <- result{idx: idx, err: err}
 			}
-			resChan <- result{item: parseHnItem(hnItem)}
-		}(id)
-		res := <- resChan
+			resChan <- result{idx: idx, item: parseHnItem(hnItem)}
+		}(i, ids[i])
+	}
+	var results []result
+	for i := 0; i < numStories; i++ {
+		results = append(results, <-resChan)
+	}
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].idx < results[j].idx
+	})
+	var stories []item
+	for _, res := range results {
 		if res.err != nil {
 			continue
 		}
 		if isStory(res.item) {
 			stories = append(stories, res.item)
-			if len(stories) >= numStories {
-				break
-			}
 		}
 	}
 	return stories, nil
