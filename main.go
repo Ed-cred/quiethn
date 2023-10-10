@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"sort"
 	"strings"
+	"sync"
 	"text/template"
 	"time"
 
@@ -60,11 +61,14 @@ func handler(numStories int, tpl *template.Template) http.HandlerFunc {
 }
 
 var (
+	cacheMutex      sync.Mutex
 	cache           []item
 	cacheExpiration time.Time
 )
 
 func getCachedStories(numStories int) ([]item, error) {
+	cacheMutex.Lock()
+	defer cacheMutex.Unlock()
 	if time.Now().Sub(cacheExpiration) < 0 {
 		return cache, nil
 	}
